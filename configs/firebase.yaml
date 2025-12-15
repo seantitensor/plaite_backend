@@ -1,0 +1,12 @@
+# Firebase configuration
+# Use --env prod or --env dev to select environment
+
+prod:
+  credentials_path: "${HOME}/Documents/plaite_resources/upload_firebase/firebase_credentials/plaite-production-firebase-adminsdk-fbsvc-0ee1e14f66.json"
+  storage_bucket: "plaite-production.firebasestorage.app"
+  collection: "recipes"
+
+dev:
+  credentials_path: "${HOME}/Documents/plaite_resources/upload_firebase/firebase_credentials/plaite-ff1e7-firebase-adminsdk-fbsvc-9aad6f0951.json"
+  storage_bucket: "plaite-ff1e7.firebasestorage.app"
+  collection: "recipes"

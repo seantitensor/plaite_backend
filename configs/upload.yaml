@@ -1,0 +1,15 @@
+# Upload pipeline configuration
+
+batch_size: 50  # Firestore batch commit size
+
+images:
+  output_dir: "./processed_images"
+  overlay_suffix: "_overlayed"
+  max_width: 1000
+  max_height: 1600
+  quality: 80
+  formats: [".jpg", ".jpeg", ".png"]
+
+upload:
+  skip_existing: true
+  image_storage_path: "recipe_images/"
