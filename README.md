@@ -15,6 +15,15 @@ uv sync --all-extras
 
 ## Configuration
 
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+# Path to recipe data (supports .pkl or .parquet)
+RECIPES_PATH=/path/to/all_enriched_recipes.pkl
+```
+
 ### Firebase Credentials
 
 Edit `configs/firebase.yaml` with your Firebase credential paths:
@@ -48,7 +57,45 @@ images:
 
 ---
 
-## Commands
+## Data Module
+
+The `plaite.data` module provides efficient recipe data loading using Polars:
+
+```python
+import plaite.data as data
+
+# Get available columns
+print(data.get_recipes_columns())
+
+# Load all recipes
+df = data.load_recipes()
+
+# Load specific columns
+df = data.load_recipes(columns=["id", "name", "ingredients"])
+
+# Filter with Django-style operators
+df = data.filter_recipes({
+    "category": "dessert",
+    "calories__lt": 500,
+    "rating__gte": 4.0
+})
+
+# Advanced queries
+import polars as pl
+df = (
+    data.recipes_table.scan()
+    .filter(pl.col("calories") < 500)
+    .group_by("category")
+    .agg(pl.col("id").count())
+    .collect()
+)
+```
+
+**See:** [QUICK_START.md](QUICK_START.md) and [src/plaite/data/README.md](src/plaite/data/README.md)
+
+---
+
+## CLI Commands
 
 ### `plaite stats`
 
@@ -220,14 +267,25 @@ plaite_backend/
 │   ├── __init__.py
 │   ├── cli.py              # CLI entrypoint (typer)
 │   ├── config.py           # Config loading & validation
+│   ├── data/               # NEW: Data loading module
+│   │   ├── __init__.py     # Public API
+│   │   ├── _tables.py      # Table wrapper (pkl/parquet)
+│   │   ├── _queries.py     # Pre-built query templates
+│   │   ├── loader.py       # Loading functions
+│   │   └── README.md       # Full documentation
 │   ├── firebase/
 │   │   ├── client.py       # Firebase initialization
 │   │   ├── stats.py        # Stats collection
 │   │   └── upload.py       # Recipe upload pipeline
 │   └── images/
 │       └── process.py      # Image download & processing
+├── examples/
+│   ├── test_data_module.py # Test data module
+│   └── advanced_queries.py # Advanced query examples
 ├── archive/                # Old code for reference
 ├── tests/
+├── .env                    # Environment variables (not committed)
 ├── pyproject.toml          # Project config (uv, ruff, pytest)
+├── QUICK_START.md          # Data module quick start
 └── README.md
 ```

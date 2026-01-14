@@ -52,3 +52,4 @@ stats_output/
 # Credentials (never commit these!)
 *credentials*.json
 *firebase-adminsdk*.json
+.env
