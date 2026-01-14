@@ -116,41 +116,41 @@ class TestGetStatsOfAllRecipes:
         assert result["unique_ingredients_count"] > 0
 
 
-class TestGetRecipes:
-    """Tests for get_recipes() function."""
+class TestGetFilteredRecipes:
+    """Tests for get_filtered_recipes() function."""
 
     def test_returns_dataframe(self):
-        """get_recipes should return a Polars DataFrame."""
-        result = data.get_recipes()
+        """get_filtered_recipes should return a Polars DataFrame."""
+        result = data.get_filtered_recipes()
         assert isinstance(result, pl.DataFrame)
 
     def test_returns_all_without_query(self):
-        """get_recipes without query should return all recipes."""
-        result = data.get_recipes()
+        """get_filtered_recipes without query should return all recipes."""
+        result = data.get_filtered_recipes()
         assert len(result) > 0
 
     def test_accepts_query_parameter(self):
-        """get_recipes should accept optional query filters."""
-        result = data.get_recipes(query={"healthGrade": "B"})
+        """get_filtered_recipes should accept optional query filters."""
+        result = data.get_filtered_recipes(query={"healthGrade": "B"})
         assert isinstance(result, pl.DataFrame)
 
     def test_query_filters_results(self):
-        """get_recipes with query should filter results."""
-        all_recipes = data.get_recipes()
-        filtered = data.get_recipes(query={"healthGrade": "B"})
+        """get_filtered_recipes with query should filter results."""
+        all_recipes = data.get_filtered_recipes()
+        filtered = data.get_filtered_recipes(query={"healthGrade": "B"})
         # Filtered should be less than or equal to all (unless all are healthGrade B)
         assert len(filtered) <= len(all_recipes)
 
     def test_query_with_operators(self):
-        """get_recipes should support filter operators like __lt, __gt."""
+        """get_filtered_recipes should support filter operators like __lt, __gt."""
         # This should not raise an error
-        result = data.get_recipes(query={"healthScore__gt": 60})
+        result = data.get_filtered_recipes(query={"healthScore__gt": 60})
         assert isinstance(result, pl.DataFrame)
 
     def test_empty_query_returns_all(self):
-        """get_recipes with empty query should return all recipes."""
-        all_recipes = data.get_recipes()
-        with_empty_query = data.get_recipes(query={})
+        """get_filtered_recipes with empty query should return all recipes."""
+        all_recipes = data.get_filtered_recipes()
+        with_empty_query = data.get_filtered_recipes(query={})
         assert len(all_recipes) == len(with_empty_query)
 
 

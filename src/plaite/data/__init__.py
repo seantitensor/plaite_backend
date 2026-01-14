@@ -68,7 +68,7 @@ from .loader import (
     get_recipes_columns,
     get_batch_of_recipes,
     get_stats_of_all_recipes,
-    get_recipes,
+    get_filtered_recipes,
 )
 from ._tables import recipes_table
 from .columns import RecipeColumn
@@ -80,6 +80,6 @@ __all__ = [
     "recipes_table",
     "get_batch_of_recipes",
     "get_stats_of_all_recipes",
-    "get_recipes",
+    "get_filtered_recipes",
     "RecipeColumn",
 ]

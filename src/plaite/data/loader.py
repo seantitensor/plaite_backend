@@ -49,7 +49,7 @@ def load_recipes(columns: list[str] | None = None) -> pl.DataFrame:
 
     See Also
     --------
-    get_recipes : Load with optional filtering
+    get_filtered_recipes : Load with optional filtering
     filter_recipes : Load with complex filters
     recipes_table.scan : Lazy loading for large datasets
     """
@@ -230,7 +230,7 @@ def get_batch_of_recipes(count: int, query: dict[str, Any] | None = None) -> pl.
 
     See Also
     --------
-    get_recipes : Get all recipes with optional filtering
+    get_filtered_recipes : Get all recipes with optional filtering
     filter_recipes : Advanced filtering with operators
     """
     if count < 0:
@@ -336,7 +336,7 @@ def get_stats_of_all_recipes() -> dict[str, Any]:
     }
 
 
-def get_recipes(query: dict[str, Any] | None = None) -> pl.DataFrame:
+def get_filtered_recipes(query: dict[str, Any] | None = None) -> pl.DataFrame:
     """
     Get recipes with optional filtering.
 
@@ -363,17 +363,17 @@ def get_recipes(query: dict[str, Any] | None = None) -> pl.DataFrame:
     --------
     >>> import plaite.data as data
     >>> # Get all recipes
-    >>> df = data.get_recipes()
+    >>> df = data.get_filtered_recipes()
     >>>
     >>> # Get filtered recipes
-    >>> df = data.get_recipes(query={
+    >>> df = data.get_filtered_recipes(query={
     ...     "healthGrade": "A",
     ...     "healthScore__gte": 80
     ... })
     >>>
     >>> # Using RecipeColumn enum for type safety
     >>> from plaite.data import RecipeColumn
-    >>> df = data.get_recipes(query={
+    >>> df = data.get_filtered_recipes(query={
     ...     RecipeColumn.HEALTH_GRADE: "A",
     ...     f"{RecipeColumn.COOK_TIME}__lt": 30
     ... })
