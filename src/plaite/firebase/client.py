@@ -48,3 +48,16 @@ def reset_client():
     if _app is not None:
         firebase_admin.delete_app(_app)
         _app = None
+
+
+def get_uploaded_recipe_ids(config: FirebaseConfig) -> set[str]:
+    """
+    Fetch all recipe IDs currently in Firebase.
+
+    Returns:
+        Set of recipe IDs that are already uploaded
+    """
+    collection = get_collection(config)
+    # Only fetch document IDs, not full documents (more efficient)
+    docs = collection.select([]).stream()
+    return {doc.id for doc in docs}

@@ -6,80 +6,79 @@ All functions return Polars DataFrames for high-performance data manipulation.
 
 Quick Start
 -----------
->>> import plaite.data as data
->>> from plaite.data import RecipeColumn
+>>> from plaite.data import Col, get_recipes
 >>>
->>> # Load all recipes
->>> recipes = data.load_recipes()
+>>> # Get all recipes
+>>> recipes = get_recipes()
 >>>
->>> # Load specific columns
->>> recipes = data.load_recipes(columns=[
-...     RecipeColumn.RECIPE_ID,
-...     RecipeColumn.TITLE,
-...     RecipeColumn.HEALTH_SCORE
-... ])
->>>
->>> # Filter recipes with type-safe columns
->>> healthy = data.filter_recipes({
-...     RecipeColumn.HEALTH_SCORE: {"__gte": 70},
-...     RecipeColumn.COOK_TIME: {"__lt": 30}
-... })
->>>
->>> # Get a batch of recipes
->>> sample = data.get_batch_of_recipes(count=10, query={
-...     RecipeColumn.HEALTH_GRADE: "A"
-... })
+>>> # Filter with the Col query builder
+>>> recipes = get_recipes(
+...     Col.health_grade.eq("A"),
+...     Col.health_score.gt(70),
+...     Col.title.contains("chicken"),
+... )
 >>>
 >>> # Get dataset statistics
+>>> import plaite.data as data
 >>> stats = data.get_stats_of_all_recipes()
 >>> print(f"Total recipes: {stats['total_recipes']}")
->>>
->>> # View available columns
->>> print(data.get_recipes_columns())
 
-Available Filter Operators
----------------------------
-- __eq or no suffix: Equal to
-- __ne: Not equal to
-- __lt: Less than
-- __le: Less than or equal to
-- __gt: Greater than
-- __ge: Greater than or equal to
-- __in: In list
-- __contains: String contains (case-insensitive)
+Col Query Methods
+-----------------
+- eq(value): Equal to
+- ne(value): Not equal to
+- lt(value): Less than
+- lte(value): Less than or equal to
+- gt(value): Greater than
+- gte(value): Greater than or equal to
+- is_in([values]): In list
+- contains(str): String contains (case-insensitive)
+- list_any_contains(str): Any element in a list contains (case-insensitive)
+
+Available Columns
+-----------------
+Col.recipe_id, Col.title, Col.description, Col.url, Col.host, Col.image,
+Col.author, Col.uuid, Col.instructions, Col.ingredient_groups, Col.ingredients,
+Col.ingredient_strings, Col.processed_ingredients, Col.tags, Col.cooking_method,
+Col.nutrients, Col.health_score, Col.health_grade, Col.num_servings, Col.cook_time,
+Col.prep_time, Col.total_time, Col.ratings, Col.ratings_count,
+Col.embedding, Col.cluster_id
 
 Performance Tips
 ----------------
-- Use `columns` parameter to load only needed columns
-- Use `RecipeColumn` enum for type-safe column references
-- Use lazy evaluation via `recipes_table.scan()` for very large datasets
 - Filter early to reduce memory usage
+- Use lazy evaluation via `recipes_table.scan()` for very large datasets
 
 See Also
 --------
 plaite.data.loader : Core loading functions
-plaite.data.columns : Column enum for type-safe queries
-plaite.data._tables : Table abstraction layer
+plaite.data.query : Col query builder
 """
 
-from .loader import (
-    load_recipes,
-    filter_recipes,
-    get_recipes_columns,
-    get_batch_of_recipes,
-    get_stats_of_all_recipes,
-    get_filtered_recipes,
-)
 from ._tables import recipes_table
 from .columns import RecipeColumn
+from .loader import (
+    filter_recipes,
+    get_batch_of_recipes,
+    get_filtered_recipes,
+    get_recipes,
+    get_recipes_columns,
+    get_stats_of_all_recipes,
+    load_recipes,
+)
+from .query import Col
 
 __all__ = [
+    # Primary API
+    "Col",
+    "get_recipes",
+    # Other functions
+    "get_filtered_recipes",
     "load_recipes",
     "filter_recipes",
     "get_recipes_columns",
-    "recipes_table",
     "get_batch_of_recipes",
     "get_stats_of_all_recipes",
-    "get_filtered_recipes",
+    "recipes_table",
     "RecipeColumn",
 ]

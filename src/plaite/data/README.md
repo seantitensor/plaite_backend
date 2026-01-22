@@ -1,8 +1,6 @@
 # Plaite Data Module
 
-Efficient data loading for Plaite recipes using Polars with a pickle file backend.
-
-⚠️ **Security Note**: This module loads data from pickle files. Only use pickle files from trusted sources.
+Efficient data loading for Plaite recipes using Polars with parquet file backend.
 
 ## Setup
 
@@ -11,10 +9,10 @@ Efficient data loading for Plaite recipes using Polars with a pickle file backen
 Add to your `.env` file:
 
 ```bash
-RECIPES_PATH=/path/to/your/recipes.pkl
+RECIPES_PATH=/path/to/your/recipes.parquet
 ```
 
-The `RECIPES_PATH` should point to a pickle file containing recipe data structured as a DataFrame with recipes as rows.
+The `RECIPES_PATH` should point to a parquet file containing recipe data structured as a DataFrame with recipes as rows.
 
 ## Quick Start
 
@@ -194,7 +192,7 @@ all_columns = RecipeColumn.values()
 ```
 data/
 ├── __init__.py          # Public API exports
-├── _tables.py           # Table class and pickle loading
+├── _tables.py           # Table class for parquet loading
 ├── columns.py           # RecipeColumn enum definition
 ├── loader.py            # High-level query functions
 └── README.md            # This file

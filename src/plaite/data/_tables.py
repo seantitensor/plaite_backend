@@ -1,31 +1,25 @@
 """Table definitions for Plaite data sources."""
 
 import os
-import pickle
+from pathlib import Path
+
 import dotenv
 import polars as pl
-from pathlib import Path
 
 dotenv.load_dotenv(override=True)
 
 
 class Table:
     """
-    A wrapper class for reading Polars DataFrames from parquet or pickle files.
+    A wrapper class for reading Polars DataFrames from parquet files.
 
-    This class provides lazy and eager loading methods, supporting both
-    parquet snapshots and pickle files. File format is auto-detected from extension.
-
-    .. warning::
-        **Security Notice for Pickle Files:**
-        Pickle files can execute arbitrary code during deserialization.
-        Only load pickle files from trusted sources. For production use,
-        prefer parquet format which is safer and more efficient.
+    This class provides lazy and eager loading methods for parquet data files,
+    optimized for efficient memory usage and query performance.
 
     Parameters
     ----------
     file_path : str
-        Full path to the data file (parquet or pickle).
+        Full path to the parquet data file (.parquet or .pq extension).
 
     Raises
     ------
@@ -58,73 +52,24 @@ class Table:
         if not self._path_obj.is_file():
             raise ValueError(
                 f"Path is not a file: {file_path}\n"
-                f"Expected a parquet (.parquet, .pq) or pickle (.pkl, .pickle) file."
+                f"Expected a parquet file (.parquet or .pq extension)."
+            )
+
+        suffix = self._path_obj.suffix.lower()
+        if suffix not in [".parquet", ".pq"]:
+            raise ValueError(
+                f"Unsupported file format: {suffix}\n"
+                f"Only parquet files (.parquet, .pq) are supported.\n"
+                f"Use scripts/convert_pickle_to_parquet.py to convert pickle files."
             )
 
         self._file_path = file_path
-        self._format = self._detect_format()
-        self._cached_df: pl.DataFrame | None = None
-
-    def _detect_format(self) -> str:
-        """Detect file format from extension."""
-        suffix = self._path_obj.suffix.lower()
-        if suffix in [".parquet", ".pq"]:
-            return "parquet"
-        elif suffix in [".pkl", ".pickle"]:
-            return "pickle"
-        else:
-            raise ValueError(
-                f"Unsupported file format: {suffix}. Use .parquet or .pkl"
-            )
-
-    def _load_pickle(self) -> pl.DataFrame:
-        """
-        Load pickle file and convert to Polars DataFrame.
-
-        .. warning::
-            Pickle files can execute arbitrary code during loading.
-            Only use pickle files from trusted sources.
-
-        Returns
-        -------
-        pl.DataFrame
-            The loaded DataFrame.
-
-        Raises
-        ------
-        TypeError
-            If pickle data cannot be converted to Polars DataFrame.
-        """
-        with open(self._file_path, "rb") as f:
-            data = pickle.load(f)
-
-        # Handle different pickle data structures
-        if isinstance(data, pl.DataFrame):
-            return data
-        elif isinstance(data, dict):
-            return pl.DataFrame(data)
-        elif isinstance(data, list):
-            return pl.DataFrame(data)
-        else:
-            # Try pandas conversion if available
-            try:
-                import pandas as pd
-
-                if isinstance(data, pd.DataFrame):
-                    return pl.from_pandas(data)
-            except ImportError:
-                pass
-            raise TypeError(
-                f"Unsupported pickle data type: {type(data)}. "
-                "Expected Polars/Pandas DataFrame, dict, or list."
-            )
 
     def scan(self) -> pl.LazyFrame:
         """
-        Lazily scan the data file without loading into memory.
+        Lazily scan the parquet file without loading into memory.
 
-        For parquet files, this enables query optimization.
-        For pickle files, the data is loaded once and cached.
+        This enables query optimization and efficient memory usage for large datasets.
 
         Returns
         -------
@@ -136,17 +81,11 @@ class Table:
         >>> lf = table.scan()
         >>> filtered = lf.filter(pl.col("calories") < 500).collect()
         """
-        if self._format == "parquet":
-            return pl.scan_parquet(self._file_path)
-        else:
-            # For pickle, load once and cache, then return lazy
-            if self._cached_df is None:
-                self._cached_df = self._load_pickle()
-            return self._cached_df.lazy()
+        return pl.scan_parquet(self._file_path)
 
     def read(self) -> pl.DataFrame:
         """
-        Eagerly read the data file into memory.
+        Eagerly read the parquet file into memory.
 
         Returns
         -------
@@ -158,12 +97,7 @@ class Table:
         >>> df = table.read()
         >>> print(df.head())
         """
-        if self._format == "parquet":
-            return pl.read_parquet(self._file_path)
-        else:
-            if self._cached_df is None:
-                self._cached_df = self._load_pickle()
-            return self._cached_df
+        return pl.read_parquet(self._file_path)
 
     def columns(self) -> str:
         """

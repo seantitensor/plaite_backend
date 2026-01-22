@@ -25,4 +25,3 @@ Example templates (uncomment and adjust based on your actual columns):
 # )
 """
 
-from ._tables import recipes_table

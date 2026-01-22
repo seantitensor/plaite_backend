@@ -7,7 +7,7 @@ I've created a data module for loading your recipes using Polars, following the 
 ```
 src/plaite/data/
 ├── __init__.py          # Public API exports
-├── _tables.py           # Table class supporting both .pkl and .parquet
+├── _tables.py           # Table class for parquet files
 ├── _queries.py          # Pre-built query templates (placeholder)
 ├── loader.py            # Loading and filtering functions
 └── README.md            # Full documentation
@@ -18,7 +18,7 @@ examples/
 
 ## Key Features
 
-1. **Supports both pickle and parquet files** - Auto-detected from file extension
+1. **Parquet format** - Efficient, columnar storage with fast queries
 2. **Lazy evaluation** - Efficient memory usage with Polars LazyFrames
 3. **Flexible filtering** - Django-style filter operators (`__lt`, `__gte`, etc.)
 4. **Direct table access** - For advanced custom queries
@@ -33,7 +33,7 @@ python examples/test_data_module.py
 ```
 
 This will:
-1. Show you all available columns in your pickle file
+1. Show you all available columns in your parquet file
 2. Load the complete dataset
 3. Test column selection
 4. Demonstrate filtering capabilities
@@ -88,23 +88,17 @@ The `filter_recipes()` function supports these operators:
 1. **Run the test script** to see your data structure
 2. **Update `_queries.py`** with your own pre-built queries based on actual columns
 3. **Add custom loader functions** to `loader.py` if needed
-4. **Consider converting to parquet** for better performance on large datasets
 
-## Converting Pickle to Parquet (Optional)
+## Converting from Pickle (If Needed)
 
-For better performance with large datasets:
+If you still have a pickle file and need to convert it to parquet:
 
-```python
-import polars as pl
-import pickle
+```bash
+# Use the provided conversion script
+python scripts/convert_pickle_to_parquet.py /path/to/recipes.pkl
 
-# Load pickle
-with open("/path/to/recipes.pkl", "rb") as f:
-    data = pickle.load(f)
-
-# Convert to Polars and save as parquet
-df = pl.DataFrame(data)  # Or pl.from_pandas(data) if pandas
-df.write_parquet("/path/to/recipes.parquet")
+# Or specify a custom output path
+python scripts/convert_pickle_to_parquet.py /path/to/recipes.pkl /path/to/output.parquet
 ```
 
 Then update your `.env`:

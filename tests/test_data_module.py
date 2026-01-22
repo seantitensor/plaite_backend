@@ -1,7 +1,7 @@
 """Unit tests for plaite.data module following TDD."""
 
-import pytest
 import polars as pl
+import pytest
 
 import plaite.data as data
 

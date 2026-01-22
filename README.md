@@ -20,8 +20,8 @@ uv sync --all-extras
 Create a `.env` file in the project root:
 
 ```bash
-# Path to recipe data (supports .pkl or .parquet)
-RECIPES_PATH=/path/to/all_enriched_recipes.pkl
+# Path to recipe data (parquet format)
+RECIPES_PATH=/path/to/all_enriched_recipes.parquet
 ```
 
 ### Firebase Credentials
@@ -127,22 +127,125 @@ uv run plaite stats --config /path/to/firebase.yaml --env prod
 
 ---
 
-### `plaite upload`
+### `plaite sync`
 
-Upload a batch of recipes to Firebase.
+Upload recipes from local data with interactive filtering.
 
 ```bash
+Basic Usage
+
+# Interactive upload with filters (default: excludes already-uploaded)
+plaite sync 50
+
+# You'll be prompted for filters:
+# - Title (contains)
+# - Ingredient (contains) 
+# - Health grade (A/B/C/D/F)
+# - Max cook time
+# - Min rating
+Command Options
+
+# Dry run - validate only, don't upload
+plaite sync 50 --dry-run
+
+# Include recipes already in Firebase (default excludes them)
+plaite sync 50 --include-uploaded
+
+# Skip confirmation prompt
+plaite sync 50 --yes
+
+# Use production environment
+plaite sync 50 --env prod
+Upload Flow (as implemented)
+1. Interactive filter selection
+
+Prompts for filters (title, ingredient, health grade, cook time, rating)
+Shows total matching recipes
+2. Create batch
+
+Selects N random recipes from local data matching filters
+Shows preview table
+3. Check Firebase
+
+Fetches existing recipe IDs from Firebase
+Filters out already-uploaded recipes (unless --include-uploaded)
+Shows skip count
+4. Validate & Transform
+
+Maps local schema to Firebase schema
+Validates required fields (tags, instructions, ingredients)
+Type checks (must be lists)
+Transforms nutrients (dict → array)
+Normalizes numServings ("4 servings" → 4.0)
+Validates image URL exists
+5. Upload
+
+Uploads valid recipes to Firebase in batches
+Shows detailed results
+Example Session
+
+$ plaite sync 50
+
+Plaite Sync - Upload to Firebase (dev)
+
+Target: recipes-dev
+
+Recipe Selection
+Filter by title (contains): chicken
+Filter by ingredient (contains): 
+Filter by health grade (A/B/C/D/F): 
+Max cook time (minutes): 
+Min rating (0-5): 
+
+Found 234 matching recipes.
+Will select 50 random recipes.
+
+Continue with upload? [Y/n]: y
+
+Selecting recipes from local data...
+Selected 50 recipes
+
+# Preview table shown here
+
+Checking Firebase for existing recipes...
+Found 1500 recipes in Firebase
+Skipping 10 already-uploaded recipes
+
+Validating and transforming recipes...
+Validating: 100%|████████| 40/40
+Valid: 38, Invalid: 2
+
+Uploading to Firebase...
+Uploading: 100%|████████| 38/38
+
+Done!
+  Selected: 50
+  Valid: 38
+  Uploaded: 38
+  Skipped: 10 (already uploaded)
+  Failed: 2
+    recipe_123: Missing required fields (tags, instructions, or ingredients)
+    recipe_456: tags is not a list
+```
+
+---
+
+### `plaite upload`
+
+Upload recipes from a JSON file to Firebase.
+
+```bash
+# Upload from JSON file (default: excludes already-uploaded)
+uv run plaite upload recipes/batch4.json --env dev
+
 # Dry run - validate without uploading
 uv run plaite upload recipes/batch4.json --dry-run
-
-# Upload to dev
-uv run plaite upload recipes/batch4.json --env dev
 
 # Upload to production
 uv run plaite upload recipes/batch4.json --env prod
 
-# Upload with images directory
-uv run plaite upload recipes/batch4.json --env prod --images-dir ./batch4_images
+# Include recipes already in Firebase
+uv run plaite upload recipes/batch4.json --include-uploaded
 
 # Custom config files
 uv run plaite upload recipes/batch4.json \
@@ -157,8 +260,52 @@ uv run plaite upload recipes/batch4.json \
 | `--env` | Environment: `prod` or `dev` (default: dev) |
 | `--config`, `-c` | Firebase config path |
 | `--upload-config` | Upload config path |
-| `--images-dir` | Directory containing images to upload |
 | `--dry-run` | Validate only, don't upload |
+| `--include-uploaded` | Include recipes already in Firebase |
+
+**Flow:**
+1. Load recipes from JSON file
+2. Check Firebase for existing recipes
+3. Validate and transform (field renaming, nutrients transformation, type checking)
+4. Upload to Firebase
+
+---
+
+### `plaite scrape`
+
+Scrape a recipe from a URL and upload to Firebase.
+
+```bash
+# Scrape and upload a recipe (default: excludes already-uploaded)
+uv run plaite scrape "https://www.allrecipes.com/recipe/123/chocolate-cake/"
+
+# Dry run to test scraping and validation
+uv run plaite scrape "https://example.com/recipe" --dry-run
+
+# Upload to production
+uv run plaite scrape "https://example.com/recipe" --env prod
+
+# Include even if already uploaded
+uv run plaite scrape "https://example.com/recipe" --include-uploaded
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--env` | Environment: `prod` or `dev` (default: dev) |
+| `--config`, `-c` | Firebase config path |
+| `--upload-config` | Upload config path |
+| `--dry-run` | Validate only, don't upload |
+| `--include-uploaded` | Include recipes already in Firebase |
+
+**Flow:**
+1. Scrape recipe data from URL (using recipe-scrapers library)
+2. Preview scraped title, host, author, tags
+3. Check Firebase for existing recipes (by URL hash)
+4. Validate and transform (field renaming, nutrients transformation, type checking)
+5. Upload to Firebase if valid
+
+**Note:** All three commands (`sync`, `upload`, `scrape`) use identical validation and produce consistent output.
 
 ---
 
@@ -267,16 +414,24 @@ plaite_backend/
 │   ├── __init__.py
 │   ├── cli.py              # CLI entrypoint (typer)
 │   ├── config.py           # Config loading & validation
-│   ├── data/               # NEW: Data loading module
+│   ├── data/               # Data loading module
 │   │   ├── __init__.py     # Public API
-│   │   ├── _tables.py      # Table wrapper (pkl/parquet)
+│   │   ├── _tables.py      # Table wrapper (parquet)
 │   │   ├── _queries.py     # Pre-built query templates
 │   │   ├── loader.py       # Loading functions
+│   │   ├── columns.py      # Column definitions
+│   │   ├── query.py        # Col query builder
 │   │   └── README.md       # Full documentation
+│   ├── pipeline/           # Upload pipelines
+│   │   ├── upload.py       # Upload from local/file/URL
+│   │   └── validation.py   # Comprehensive validation
+│   ├── scraper/            # Recipe scraping
+│   │   ├── __init__.py
+│   │   └── scraper.py      # URL scraping with recipe-scrapers
 │   ├── firebase/
 │   │   ├── client.py       # Firebase initialization
 │   │   ├── stats.py        # Stats collection
-│   │   └── upload.py       # Recipe upload pipeline
+│   │   └── upload.py       # Legacy batch upload
 │   └── images/
 │       └── process.py      # Image download & processing
 ├── examples/

@@ -1,8 +1,11 @@
 """Functions for loading and filtering recipe data."""
 
 from typing import Any
+
 import polars as pl
+
 from ._tables import recipes_table
+from .query import Filter
 
 
 def load_recipes(columns: list[str] | None = None) -> pl.DataFrame:
@@ -301,7 +304,11 @@ def get_stats_of_all_recipes() -> dict[str, Any]:
         .collect()
     )
     recipes_per_cluster = dict(
-        zip(cluster_counts["cluster_id"].to_list(), cluster_counts["count"].to_list())
+        zip(
+            cluster_counts["cluster_id"].to_list(),
+            cluster_counts["count"].to_list(),
+            strict=True,
+        )
     )
 
     # Get health grade distribution
@@ -315,6 +322,7 @@ def get_stats_of_all_recipes() -> dict[str, Any]:
         zip(
             health_grade_counts["healthGrade"].to_list(),
             health_grade_counts["count"].to_list(),
+            strict=True,
         )
     )
 
@@ -336,54 +344,60 @@ def get_stats_of_all_recipes() -> dict[str, Any]:
     }
 
 
-def get_filtered_recipes(query: dict[str, Any] | None = None) -> pl.DataFrame:
+def get_filtered_recipes(*filters: Filter, query: dict[str, Any] | None = None) -> pl.DataFrame:
     """
     Get recipes with optional filtering.
 
-    Convenience function that combines loading and filtering capabilities.
-    Use this when you want a simple API for loading recipes with or without filters.
+    Supports both the new Col-based query builder and legacy dict-based queries.
 
     Parameters
     ----------
+    *filters : Filter
+        Filter expressions created using Col (e.g., Col.title.contains("chicken")).
     query : dict, optional
-        Query filters to apply. If None or empty, returns all recipes.
-        See `filter_recipes()` for supported operators.
+        Legacy query filters. See `filter_recipes()` for supported operators.
 
     Returns
     -------
     pl.DataFrame
         A DataFrame containing filtered or all recipe data.
 
-    Raises
-    ------
-    ValueError
-        If query contains invalid columns or operators.
-
     Examples
     --------
-    >>> import plaite.data as data
+    >>> from plaite.data import Col, get_filtered_recipes
+    >>>
+    >>> # Using Col query builder (recommended)
+    >>> df = get_filtered_recipes(
+    ...     Col.health_grade.eq("A"),
+    ...     Col.health_score.gt(70),
+    ...     Col.title.contains("chicken"),
+    ... )
+    >>>
     >>> # Get all recipes
-    >>> df = data.get_filtered_recipes()
-    >>>
-    >>> # Get filtered recipes
-    >>> df = data.get_filtered_recipes(query={
-    ...     "healthGrade": "A",
-    ...     "healthScore__gte": 80
-    ... })
-    >>>
-    >>> # Using RecipeColumn enum for type safety
-    >>> from plaite.data import RecipeColumn
-    >>> df = data.get_filtered_recipes(query={
-    ...     RecipeColumn.HEALTH_GRADE: "A",
-    ...     f"{RecipeColumn.COOK_TIME}__lt": 30
-    ... })
+    >>> df = get_filtered_recipes()
 
     See Also
     --------
+    Col : Column accessor for building queries
     load_recipes : Load all recipes without filtering
-    filter_recipes : Advanced filtering with operators
-    get_batch_of_recipes : Get limited number of recipes
     """
+    lf = recipes_table.scan()
+
+    # Apply Col-based filters
+    if filters:
+        for f in filters:
+            lf = lf.filter(f.to_polars_expr())
+
+    # Apply legacy dict-based filters
     if query:
-        return filter_recipes(query)
-    return load_recipes()
+        df = filter_recipes(query)
+        if filters:
+            # Combine: apply Col filters to the dict-filtered result
+            return lf.collect().join(df, on="recipe_id", how="inner")
+        return df
+
+    return lf.collect()
+
+
+# Convenience alias for cleaner API
+get_recipes = get_filtered_recipes

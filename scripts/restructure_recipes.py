@@ -3,7 +3,7 @@
 
 import os
 import pickle
-from pathlib import Path
+
 import polars as pl
 from dotenv import load_dotenv
 

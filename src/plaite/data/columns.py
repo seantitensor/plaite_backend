@@ -44,6 +44,7 @@ class RecipeColumn(str, Enum):
     INSTRUCTIONS = "instructions"
     INGREDIENT_GROUPS = "ingredientGroups"
     INGREDIENTS = "ingredients"
+    INGREDIENT_STRINGS = "ingredientStrings"  # List of ingredient strings
     PROCESSED_INGREDIENTS = "procesedIngredients"  # Note: typo in source data
 
     # Metadata
