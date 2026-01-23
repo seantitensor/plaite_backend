@@ -163,7 +163,7 @@ def upload(
     ] = False,
 ):
     """Upload a batch of recipes from JSON file to Firebase."""
-    from plaite.pipeline.upload import upload_from_file
+    from plaite.pipeline.file_upload import upload_from_file
 
     console.print(Panel(f"[bold]Plaite Upload - {env.upper()}[/bold]", style="blue"))
     console.print(f"Target: {env}")
@@ -221,7 +221,7 @@ def sync(
 ):
     """Upload recipes from local data to Firebase (interactive)."""
     from plaite.data import get_recipes
-    from plaite.pipeline.upload import upload_from_local
+    from plaite.pipeline.local_upload import upload_from_local
 
     console.print(f"[bold]Plaite Sync - Upload to Firebase ({env})[/bold]\n")
 
@@ -231,20 +231,24 @@ def sync(
 
     console.print(f"Target: [cyan]{firebase_config.collection}[/cyan]")
 
-    # Interactive filter selection
-    filters = _prompt_filters()
+    while True:
+        # Interactive filter selection
+        filters = _prompt_filters()
 
-    # Show how many match
-    df = get_recipes(*filters) if filters else get_recipes()
-    total_matching = len(df)
-    console.print(f"\n[bold]Found {total_matching} matching recipes.[/bold]")
+        # Show how many match
+        df = get_recipes(*filters) if filters else get_recipes()
+        total_matching = len(df)
+        console.print(f"\n[bold]Found {total_matching} matching recipes.[/bold]")
 
-    if total_matching == 0:
-        console.print("[yellow]No recipes match the filters. Try different criteria.[/yellow]")
-        raise typer.Exit(1)
+        if total_matching == 0:
+            console.print("[yellow]No recipes match the filters.[/yellow]")
+            if typer.confirm("Try again?", default=True):
+                continue
+            raise typer.Exit(1)
 
-    actual_count = min(count, total_matching)
-    console.print(f"Will select {actual_count} random recipes.\n")
+        actual_count = min(count, total_matching)
+        console.print(f"Will select {actual_count} random recipes.\n")
+        break
 
     # Confirm
     if not no_confirm:
@@ -290,7 +294,7 @@ def scrape(
     ] = False,
 ):
     """Scrape a recipe from a URL and upload to Firebase."""
-    from plaite.pipeline.upload import upload_from_url
+    from plaite.pipeline.url_upload import upload_from_url
 
     console.print(Panel(f"[bold]Plaite Scrape - {env.upper()}[/bold]", style="blue"))
     console.print(f"Target: {env}\n")
