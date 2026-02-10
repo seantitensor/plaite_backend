@@ -1,5 +1,7 @@
 """Upload pipeline for local parquet data."""
 
+import tempfile
+from pathlib import Path
 from typing import Any
 
 import polars as pl
@@ -10,14 +12,10 @@ from plaite.config import FirebaseConfig, UploadConfig
 from plaite.data import get_recipes
 from plaite.data.query import Filter
 from plaite.firebase.client import get_uploaded_recipe_ids
-from plaite.firebase.upload import upload_batch
+from plaite.firebase.upload import upload_batch, upload_image
+from plaite.images import ImageGenerator
 from plaite.models.recipe import Recipe
 from plaite.pipeline._shared import UploadResult
-
-
-def df_to_recipes(df: pl.DataFrame) -> list[dict[str, Any]]:
-    """Convert a Polars DataFrame to a list of recipe dicts."""
-    return df.to_dicts()
 
 
 def select_recipes(
@@ -115,42 +113,10 @@ def upload_from_local(
         return UploadResult()
 
     preview_recipes(df, console)
-    recipes = df_to_recipes(df)
+    recipes = df.to_dicts()
 
     if dry_run:
         console.print("\n[yellow]DRY RUN - validating only[/yellow]")
-        result = UploadResult(total_selected=len(recipes))
-
-        if exclude_uploaded:
-            console.print("\n[bold]Checking Firebase for existing recipes...[/bold]")
-            uploaded_ids = get_uploaded_recipe_ids(config)
-            console.print(f"Found {len(uploaded_ids)} recipes in Firebase")
-            recipes_to_process = [
-                r for r in recipes if r.get("recipe_id") not in uploaded_ids
-            ]
-            skipped_count = len(recipes) - len(recipes_to_process)
-            if skipped_count > 0:
-                console.print(f"Skipping {skipped_count} already-uploaded recipes")
-                for r in recipes:
-                    if r.get("recipe_id") in uploaded_ids:
-                        result.skipped.append({"id": r.get("recipe_id")})
-            recipes = recipes_to_process
-
-        console.print("\n[bold]Validating and transforming recipes...[/bold]")
-        for recipe in recipes:
-            try:
-                model = Recipe.from_raw(recipe)
-                model.validate()
-                result.total_valid += 1
-            except Exception as e:
-                result.failed.append({"id": recipe.get("recipe_id"), "error": str(e)})
-
-        console.print("\n[green]Validation complete.[/green]")
-        console.print(f"  Valid: {result.total_valid}")
-        console.print(f"  Invalid: {len(result.failed)}")
-        if result.skipped:
-            console.print(f"  Skipped: {len(result.skipped)} (already uploaded)")
-        return result
 
     result = UploadResult(total_selected=len(recipes))
 
@@ -158,9 +124,7 @@ def upload_from_local(
         console.print("\n[bold]Checking Firebase for existing recipes...[/bold]")
         uploaded_ids = get_uploaded_recipe_ids(config)
         console.print(f"Found {len(uploaded_ids)} recipes in Firebase")
-        recipes_to_process = [
-            r for r in recipes if r.get("recipe_id") not in uploaded_ids
-        ]
+        recipes_to_process = [r for r in recipes if r.get("recipe_id") not in uploaded_ids]
         skipped_count = len(recipes) - len(recipes_to_process)
         if skipped_count > 0:
             console.print(f"Skipping {skipped_count} already-uploaded recipes")
@@ -190,11 +154,43 @@ def upload_from_local(
         console.print("[red]No valid recipes to upload.[/red]")
         return result
 
-    #generate images
+    if dry_run:
+        return result
 
-    #upload images
+    # Generate and upload images
+    console.print("\n[bold]Generating and uploading images...[/bold]")
 
-    #save image url to recipe.image
+    # Initialize generator
+    try:
+        generator = ImageGenerator()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            for recipe in valid_recipes:
+                try:
+                    title = recipe.get("title", "Unknown Recipe")
+                    image_url = upgen_images(
+                        generator=generator,
+                        temp_path=temp_path,
+                        recipe=recipe,
+                        config=config,
+                        upload_config=upload_config,
+                        console=console,
+                    )
+                    if image_url:
+                        recipe["image"] = image_url
+                        console.print(f"    [green]Image linked:[/green] {image_url}")
+                    else:
+                        console.print(f"    [red]Failed to upload image for {title}[/red]")
+
+                except Exception as e:
+                    console.print(f"    [red]Image processing failed for {title}: {e}[/red]")
+                    # We continue even if image generation fails, uploading the recipe without new image
+
+    except Exception as e:
+        console.print(f"[red]Image generator initialization failed: {e}[/red]")
+        console.print("[yellow]Proceeding with recipe upload without image generation...[/yellow]")
 
     console.print("\n[bold]Uploading to Firebase...[/bold]")
     upload_results = upload_batch(
@@ -207,3 +203,36 @@ def upload_from_local(
     result.uploaded = upload_results.get("success", 0)
     result.failed.extend(upload_results.get("failed", []))
     return result
+
+
+def upgen_images(
+    generator: ImageGenerator,
+    temp_path: Path,
+    recipe: dict,
+    config: FirebaseConfig,
+    upload_config: UploadConfig,
+    console: Console,
+) -> str | None:
+    title = recipe.get("title", "Unknown Recipe")
+    ingredients = recipe.get("ingredientStrings", [])  # using ingredientStrings for prompt
+
+    # Construct prompt
+    ing_text = ", ".join(ingredients[:5])
+    prompt = f"Professional food photography of {title} with {ing_text}"
+
+    console.print(f"  Generating image for: [cyan]{title}[/cyan]")
+
+    # Generate
+    image = generator.generate(prompt=prompt, num_images=1, aspect_ratio="9:16", image_size="1K")
+
+    if not image:
+        console.print(f"    [yellow]No image generated for {title}[/yellow]")
+        return None
+
+    # Save to temp
+    image_path = temp_path / f"{recipe['id']}.png"
+    image[0].save(image_path, "PNG")
+    console.print("    Uploading to Storage...")
+    return upload_image(
+        image_path=image_path, recipe_id=recipe["id"], config=config, upload_config=upload_config
+    )

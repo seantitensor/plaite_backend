@@ -24,4 +24,3 @@ Example templates (uncomment and adjust based on your actual columns):
 #     .sort("count", descending=True)
 # )
 """
-

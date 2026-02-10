@@ -33,11 +33,14 @@ ENV/
 .vscode/
 *.swp
 *.swo
+.ipynb_checkpoints/
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # OS
 .DS_Store
@@ -48,8 +51,15 @@ Thumbs.db
 !configs/*.yaml
 processed_images/
 stats_output/
+*.parquet
+*.log
+generated_image*.png
+batch*.json
+recipes/*.json
 
 # Credentials (never commit these!)
 *credentials*.json
 *firebase-adminsdk*.json
 .env
+
+.claude/

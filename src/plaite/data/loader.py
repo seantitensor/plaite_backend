@@ -298,10 +298,7 @@ def get_stats_of_all_recipes() -> dict[str, Any]:
 
     # Get cluster distribution
     cluster_counts = (
-        lazy_df.group_by("cluster_id")
-        .agg(pl.len().alias("count"))
-        .sort("cluster_id")
-        .collect()
+        lazy_df.group_by("cluster_id").agg(pl.len().alias("count")).sort("cluster_id").collect()
     )
     recipes_per_cluster = dict(
         zip(
@@ -313,10 +310,7 @@ def get_stats_of_all_recipes() -> dict[str, Any]:
 
     # Get health grade distribution
     health_grade_counts = (
-        lazy_df.group_by("healthGrade")
-        .agg(pl.len().alias("count"))
-        .sort("healthGrade")
-        .collect()
+        lazy_df.group_by("healthGrade").agg(pl.len().alias("count")).sort("healthGrade").collect()
     )
     recipes_per_health_grade = dict(
         zip(
@@ -328,9 +322,7 @@ def get_stats_of_all_recipes() -> dict[str, Any]:
 
     # Count unique ingredients (explode list and count distinct)
     unique_ingredients = (
-        lazy_df.select(pl.col("ingredients").explode().unique().len())
-        .collect()
-        .item()
+        lazy_df.select(pl.col("ingredients").explode().unique().len()).collect().item()
     )
 
     return {

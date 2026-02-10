@@ -1,5 +1,10 @@
-"""Image processing utilities."""
+"""Image processing and generation utilities."""
 
-from plaite.images.process import add_overlay, download_image, process_images
+from plaite.images.generate import ImageGenerator
+from plaite.images.process import add_overlay, download_image
 
-__all__ = ["download_image", "process_images", "add_overlay"]
+__all__ = [
+    "download_image",
+    "add_overlay",
+    "ImageGenerator",
+]

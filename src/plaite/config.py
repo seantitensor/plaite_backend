@@ -23,22 +23,10 @@ class FirebaseConfig(BaseModel):
         return Path(expanded)
 
 
-class ImageConfig(BaseModel):
-    """Image processing configuration."""
-
-    output_dir: Path = Path("./processed_images")
-    overlay_suffix: str = "_overlayed"
-    max_width: int = 1000
-    max_height: int = 1600
-    quality: int = 80
-    formats: list[str] = [".jpg", ".jpeg", ".png"]
-
-
 class UploadConfig(BaseModel):
     """Upload pipeline configuration."""
 
     batch_size: int = 50
-    images: ImageConfig = ImageConfig()
     skip_existing: bool = True
     image_storage_path: str = "recipe_images/"
 

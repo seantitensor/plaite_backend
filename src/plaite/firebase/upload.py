@@ -1,4 +1,5 @@
 """Recipe and image upload to Firebase."""
+
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +50,7 @@ def upload_image(
     except Exception as e:
         print(f"Error uploading image {image_path}: {e}")
         return None
+
 
 def upload_batch(
     recipes: list[dict[str, Any]],

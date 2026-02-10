@@ -122,18 +122,14 @@ def scrape_recipe(url: str, timeout: int = 10) -> dict[str, Any] | None:
     # Instructions
     try:
         instructions = scraper.instructions()
-        recipe_data["instructions"] = (
-            instructions.splitlines() if instructions else []
-        )
+        recipe_data["instructions"] = instructions.splitlines() if instructions else []
     except Exception:
         recipe_data["instructions"] = []
 
     # Ingredient groups
     try:
         ingredient_groups = scraper.ingredient_groups()
-        recipe_data["ingredientGroups"] = [
-            group.__dict__ for group in ingredient_groups
-        ]
+        recipe_data["ingredientGroups"] = [group.__dict__ for group in ingredient_groups]
     except Exception:
         recipe_data["ingredientGroups"] = []
 

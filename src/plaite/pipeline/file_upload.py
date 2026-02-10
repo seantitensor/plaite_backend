@@ -41,7 +41,7 @@ def upload_from_file(
     Returns:
         UploadResult with counts and any failures
     """
-    #load recipes from json
+    # load recipes from json
     console.print(f"\n[bold]Loading recipes from {file_path}...[/bold]")
 
     with open(file_path, encoding="utf-8") as f:
@@ -60,11 +60,11 @@ def upload_from_file(
     console.print("\n[bold]Preview:[/bold]")
     for i, recipe in enumerate(recipes[:5]):
         title = recipe.get("title", "Unknown")[:50]
-        console.print(f"  {i+1}. {title}")
+        console.print(f"  {i + 1}. {title}")
     if len(recipes) > 5:
         console.print(f"  ... and {len(recipes) - 5} more")
 
-    #dry run
+    # dry run
     if dry_run:
         console.print("\n[yellow]DRY RUN - validating only[/yellow]")
         result = UploadResult(total_selected=len(recipes))
@@ -74,9 +74,7 @@ def upload_from_file(
             uploaded_ids = get_uploaded_recipe_ids(config)
             console.print(f"Found {len(uploaded_ids)} recipes in Firebase")
 
-            recipes_to_process = [
-                r for r in recipes if r.get("id") not in uploaded_ids
-            ]
+            recipes_to_process = [r for r in recipes if r.get("id") not in uploaded_ids]
             skipped_count = len(recipes) - len(recipes_to_process)
             if skipped_count > 0:
                 console.print(f"Skipping {skipped_count} already-uploaded recipes")
@@ -108,9 +106,7 @@ def upload_from_file(
         uploaded_ids = get_uploaded_recipe_ids(config)
         console.print(f"Found {len(uploaded_ids)} recipes in Firebase")
 
-        recipes_to_process = [
-            r for r in recipes if r.get("id") not in uploaded_ids
-        ]
+        recipes_to_process = [r for r in recipes if r.get("id") not in uploaded_ids]
         skipped_count = len(recipes) - len(recipes_to_process)
         if skipped_count > 0:
             console.print(f"Skipping {skipped_count} already-uploaded recipes")
@@ -140,11 +136,11 @@ def upload_from_file(
         console.print("[red]No valid recipes to upload.[/red]")
         return result
 
-    #generate images
+    # generate images
 
-    #upload images
+    # upload images
 
-    #save image url to recipe.image
+    # save image url to recipe.image
 
     console.print("\n[bold]Uploading to Firebase...[/bold]")
     upload_results = upload_batch(

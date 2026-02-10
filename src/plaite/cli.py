@@ -5,10 +5,14 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 
 from plaite.config import Env, load_firebase_config, load_upload_config
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = typer.Typer(
     name="plaite",
@@ -105,7 +109,7 @@ def stats(
         table.add_column("Value", justify="right")
 
         table.add_row("Total Recipes", f"{local_stats['total_recipes']:,}")
-        table.add_row("Total Columns", str(local_stats['total_columns']))
+        table.add_row("Total Columns", str(local_stats["total_columns"]))
         table.add_row("Unique Ingredients", f"{local_stats['unique_ingredients_count']:,}")
 
         console.print(table)
@@ -117,9 +121,9 @@ def stats(
         grade_table.add_column("Count", justify="right")
         grade_table.add_column("%", justify="right")
 
-        total = local_stats['total_recipes']
+        total = local_stats["total_recipes"]
         for grade in ["A", "B", "C", "D", "F"]:
-            count = local_stats['recipes_per_health_grade'].get(grade, 0)
+            count = local_stats["recipes_per_health_grade"].get(grade, 0)
             pct = round(count / total * 100, 1) if total > 0 else 0
             grade_table.add_row(grade, f"{count:,}", f"{pct}%")
 
@@ -329,43 +333,78 @@ def scrape(
             console.print(f"    {fail['id']}: {fail.get('error', 'Unknown error')}")
 
 
-@app.command("process-images")
-def process_images_cmd(
-    batch: Annotated[Path, typer.Argument(help="Path to batch JSON file with recipes")],
-    output_dir: Annotated[Path, typer.Option("--output", "-o", help="Output directory")] = Path(
-        "./processed_images"
+@app.command("generate-image")
+def generate_image_cmd(
+    prompt: Annotated[str, typer.Argument(help="Text description of the image to generate")],
+    output: Annotated[Path, typer.Option("--output", "-o", help="Output file path")] = Path(
+        "./generated_image.png"
     ),
-    config: Annotated[Path, typer.Option(help="Upload config path")] = DEFAULT_UPLOAD_CONFIG,
-    no_download: Annotated[bool, typer.Option(help="Skip downloading, process existing")] = False,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            help="Google image model to use (uses IMAGE_GENERATION_MODEL env if not specified)"
+        ),
+    ] = None,
+    aspect_ratio: Annotated[
+        str, typer.Option(help="Aspect ratio: 1:1, 3:4, 4:3, 9:16, or 16:9")
+    ] = "9:16",
+    num_images: Annotated[int, typer.Option(help="Number of images to generate (1-4)")] = 1,
 ):
-    """Download and process images for a batch of recipes."""
-    import json
+    """Generate images using Google Generative AI.
 
-    from plaite.images.process import process_images
+    Requires GOOGLE_API_KEY environment variable to be set.
+    Uses IMAGE_GENERATION_MODEL env var for default model.
 
-    upload_cfg = load_upload_config(config)
+    Examples:
+        plaite generate-image "Delicious chocolate cake with strawberries"
+        plaite generate-image "Homemade pizza" -o pizza.png --model nano-banana-pro-preview
+        plaite generate-image "Pasta carbonara" --aspect-ratio 16:9 --num-images 2
+    """
+    from plaite.images import ImageGenerator
 
-    console.print(f"[bold]Loading recipes from {batch}...[/bold]")
-    with open(batch, encoding="utf-8") as f:
-        recipes = json.load(f)
+    console.print(Panel("[bold]Image Generation[/bold]", style="cyan"))
+    console.print(f"Prompt: {prompt}")
+    console.print(f"Model: {model or '(using env default)'}")
+    console.print(f"Aspect ratio: {aspect_ratio}")
+    console.print(f"Number of images: {num_images}\n")
 
-    console.print(f"Found {len(recipes)} recipes")
-    console.print(f"Output directory: {output_dir}\n")
+    try:
+        generator = ImageGenerator(default_model=model)
 
-    mapping = process_images(
-        recipes=recipes,
-        output_dir=output_dir,
-        config=upload_cfg.images,
-        download=not no_download,
-    )
+        # Generate images
+        console.print("[yellow]Generating images...[/yellow]")
+        images = generator.generate(
+            prompt=prompt,
+            num_images=num_images,
+            aspect_ratio=aspect_ratio,
+        )
 
-    console.print(f"\n[green]Processed {len(mapping)} images[/green]")
+        # Save images
+        output_path = Path(output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Save mapping
-    mapping_path = output_dir / "image_mapping.json"
-    with open(mapping_path, "w", encoding="utf-8") as f:
-        json.dump(mapping, f, indent=2, ensure_ascii=False)
-    console.print(f"Mapping saved to {mapping_path}")
+        saved_paths = []
+        for i, image in enumerate(images, start=1):
+            if num_images == 1:
+                filepath = output_path
+            else:
+                # For multiple images, add number to filename
+                stem = output_path.stem
+                suffix = output_path.suffix or ".png"
+                filepath = output_path.parent / f"{stem}_{i}{suffix}"
+
+            image.save(filepath, "PNG")
+            saved_paths.append(filepath)
+            console.print(f"[green]✓[/green] Saved: {filepath}")
+
+        console.print(f"\n[bold green]Success![/bold green] Generated {len(images)} image(s)")
+
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+    except RuntimeError as e:
+        console.print(f"[red]Generation failed:[/red] {e}")
+        raise typer.Exit(1) from None
 
 
 @app.command()

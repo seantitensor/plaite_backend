@@ -1,6 +1,6 @@
 # Plaite Backend
 
-Backend CLI tools for Plaite recipe management. Get stats from Firebase, upload recipes, and process images.
+Backend CLI tools for Plaite recipe management. Get stats from Firebase, upload recipes, and generate images.
 
 ## Setup
 
@@ -22,6 +22,9 @@ Create a `.env` file in the project root:
 ```bash
 # Path to recipe data (parquet format)
 RECIPES_PATH=/path/to/all_enriched_recipes.parquet
+
+# Google API key for image generation (optional)
+GOOGLE_API_KEY=your-google-api-key-here
 ```
 
 ### Firebase Credentials
@@ -42,17 +45,12 @@ dev:
 
 ### Upload Settings
 
-Edit `configs/upload.yaml` for batch upload and image processing settings:
+Edit `configs/upload.yaml` for batch upload settings:
 
 ```yaml
 batch_size: 50
-
-images:
-  output_dir: "./processed_images"
-  overlay_suffix: "_overlayed"
-  max_width: 1000
-  max_height: 1600
-  quality: 80
+skip_existing: true
+image_storage_path: "recipe_images/"
 ```
 
 ---
@@ -309,36 +307,32 @@ uv run plaite scrape "https://example.com/recipe" --include-uploaded
 
 ---
 
-### `plaite process-images`
+### `plaite generate-image`
 
-Download and process images for a batch of recipes.
+Generate recipe images using Google Imagen 4 AI.
 
 ```bash
-# Basic usage - download and process images
-uv run plaite process-images recipes/batch4.json
+# Basic usage
+uv run plaite generate-image "Delicious chocolate cake with strawberries"
 
-# Specify output directory
-uv run plaite process-images recipes/batch4.json --output ./batch4_images
+# Specify output path and model
+uv run plaite generate-image "Homemade pizza" --output pizza.png --model ultra
 
-# Skip downloading, just process existing images
-uv run plaite process-images recipes/batch4.json --no-download
-
-# Custom config
-uv run plaite process-images recipes/batch4.json --config configs/upload.yaml
+# Change aspect ratio and generate multiple variations
+uv run plaite generate-image "Pasta carbonara" --aspect-ratio 16:9 --num-images 4
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--output`, `-o` | Output directory (default: ./processed_images) |
-| `--config` | Upload config path |
-| `--no-download` | Skip downloading, process existing files only |
+| `--output`, `-o` | Output file path (default: generated_image.png) |
+| `--model` | Model variant: standard, ultra, or fast (default: standard) |
+| `--aspect-ratio` | Aspect ratio: 1:1, 3:4, 4:3, 9:16, or 16:9 (default: 4:3) |
+| `--num-images` | Number of images to generate, 1-4 (default: 1) |
 
-**Output:**
-- Downloads images from recipe URLs
-- Resizes to configured max dimensions
-- Saves with overlay suffix
-- Creates `image_mapping.json` in output directory
+**Requirements:**
+- Set `GOOGLE_API_KEY` environment variable
+- See `IMAGE_GENERATION.md` for detailed documentation
 
 ---
 
@@ -357,20 +351,17 @@ uv run plaite version
 ### 1. Upload New Recipes
 
 ```bash
-# Step 1: Process images
-uv run plaite process-images recipes/batch4.json --output ./batch4_images
-
-# Step 2: Dry run to validate
+# Step 1: Dry run to validate
 uv run plaite upload recipes/batch4.json --env dev --dry-run
 
-# Step 3: Upload to dev for testing
-uv run plaite upload recipes/batch4.json --env dev --images-dir ./batch4_images_overlayed
+# Step 2: Upload to dev for testing
+uv run plaite upload recipes/batch4.json --env dev
 
-# Step 4: Verify with stats
+# Step 3: Verify with stats
 uv run plaite stats --env dev
 
-# Step 5: Upload to production
-uv run plaite upload recipes/batch4.json --env prod --images-dir ./batch4_images_overlayed
+# Step 4: Upload to production
+uv run plaite upload recipes/batch4.json --env prod
 ```
 
 ### 2. Get Database Stats

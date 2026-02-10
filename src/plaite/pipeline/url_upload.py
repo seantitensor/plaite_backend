@@ -109,11 +109,11 @@ def upload_from_url(
 
     result.total_valid = 1
 
-    #generate images
+    # generate images
 
-    #upload images
+    # upload images
 
-    #save image url to recipe.image
+    # save image url to recipe.image
     console.print("\n[bold]Uploading to Firebase...[/bold]")
     upload_results = upload_batch(
         recipes=[valid_recipe],

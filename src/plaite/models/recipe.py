@@ -92,6 +92,7 @@ class Recipe(BaseModel):
         if isinstance(v, str):
             # "4 servings", "4-6 servings"
             import re
+
             nums = re.findall(r"\d+\.?\d*", v)
             return float(nums[0]) if nums else None
         return None
@@ -104,7 +105,7 @@ class Recipe(BaseModel):
             ]
         return self
 
-# ...existing code...
+    # ...existing code...
     @classmethod
     def from_raw(cls, data: dict[str, Any]) -> Recipe:
         """
@@ -122,7 +123,11 @@ class Recipe(BaseModel):
         structured_ingredients: list[dict[str, Any]] = []
         if isinstance(processed, list):
             structured_ingredients = processed
-        elif isinstance(raw_ingredients, list) and raw_ingredients and isinstance(raw_ingredients[0], dict):
+        elif (
+            isinstance(raw_ingredients, list)
+            and raw_ingredients
+            and isinstance(raw_ingredients[0], dict)
+        ):
             structured_ingredients = raw_ingredients
 
         return cls(

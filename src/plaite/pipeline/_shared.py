@@ -13,5 +13,3 @@ class UploadResult:
     uploaded: int = 0
     failed: list[dict[str, Any]] = field(default_factory=list)
     skipped: list[dict[str, Any]] = field(default_factory=list)
-
-
