@@ -1190,11 +1190,45 @@ def main() -> None:
 
     console.print(f"[bold]Diet Tagger[/bold]  |  env=[cyan]{args.env}[/cyan]"
                   f"  dry_run=[cyan]{args.dry_run}[/cyan]")
-    console.print(f"Loading recipes from: [dim]{recipes_path}[/dim]")
 
-    df = pl.read_parquet(recipes_path, columns=[
-        "recipe_id", "title", "ingredients", "nutrients", "tags",
-    ])
+    if args.firebase_only:
+        console.print(f"Loading recipes from Firebase ([cyan]{args.env}[/cyan])…")
+        from pathlib import Path as _Path
+        from plaite.config import load_firebase_config
+        from plaite.firebase.client import get_collection
+        _config_path = _Path(__file__).parent.parent / "configs" / "firebase.yaml"
+        _config = load_firebase_config(_config_path, args.env)
+        _collection = get_collection(_config)
+        _docs = _collection.select(["title", "ingredientStrings", "nutrients", "tags"]).stream()
+        _rows = []
+        for _doc in _docs:
+            _d = _doc.to_dict()
+            # Prefer ingredientStrings; fall back to ingredients[].displayString
+            _ing_strings = _d.get("ingredientStrings") or []
+            if not _ing_strings:
+                _ing_strings = [
+                    i.get("displayString") for i in (_d.get("ingredients") or [])
+                    if isinstance(i, dict) and i.get("displayString")
+                ]
+            _rows.append({
+                "recipe_id": _doc.id,
+                "title": _d.get("title") or "",
+                "ingredients": [i for i in _ing_strings if i],
+                "nutrients": _d.get("nutrients") or [],
+                "tags": _d.get("tags") or [],
+            })
+        df = pl.DataFrame(_rows, schema={
+            "recipe_id": pl.String,
+            "title": pl.String,
+            "ingredients": pl.List(pl.String),
+            "nutrients": pl.List(pl.Struct({"name": pl.String, "amount": pl.Float64, "unit": pl.String})),
+            "tags": pl.List(pl.String),
+        })
+    else:
+        console.print(f"Loading recipes from: [dim]{recipes_path}[/dim]")
+        df = pl.read_parquet(recipes_path, columns=[
+            "recipe_id", "title", "ingredients", "nutrients", "tags",
+        ])
 
     console.print(f"Loaded [bold]{len(df)}[/bold] recipes.")
 
