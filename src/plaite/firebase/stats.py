@@ -142,6 +142,25 @@ def get_stats(config: FirebaseConfig, limit: int | None = None) -> RecipeStats:
     return stats
 
 
+def get_tags(config: FirebaseConfig) -> dict[str, int]:
+    """
+    Get all unique tags and their counts from Firebase.
+
+    Returns
+    -------
+    dict[str, int]
+        Tag strings mapped to the number of recipes they appear on,
+        sorted descending by count.
+    """
+    collection = get_collection(config)
+    counts: Counter = Counter()
+    for doc in collection.select(["tags"]).stream():
+        tags = (doc.to_dict() or {}).get("tags") or []
+        if isinstance(tags, list):
+            counts.update(t for t in tags if t)
+    return dict(counts.most_common())
+
+
 def print_stats(stats: RecipeStats, console: Console | None = None):
     """Print stats in a formatted table."""
     if console is None:

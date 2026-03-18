@@ -1,6 +1,7 @@
 """Image downloading and processing."""
 
 import io
+from pathlib import Path
 
 import requests
 from PIL import Image
@@ -41,13 +42,14 @@ def add_overlay(img: Image) -> Image:
         # Convert to RGB if necessary (for PNG with transparency)
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
-        overlay = Image.open("src/plaite/images/plaite_overlay.png").convert("RGBA")
+        overlay = Image.open(Path(__file__).parent / "plaite_overlay.png").convert("RGBA")
         if img.size != overlay.size:
             overlay_resized = overlay.resize(img.size)
         else:
             overlay_resized = overlay
 
-        return img.paste(overlay_resized, (0, 0), overlay_resized)
+        img.paste(overlay_resized, (0, 0), overlay_resized)
+        return img
 
     except Exception as e:
         print(f"Failed to process image: {e}")

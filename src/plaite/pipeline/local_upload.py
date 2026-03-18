@@ -5,15 +5,17 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
+import typer
 from rich.console import Console
 from rich.table import Table
 
 from plaite.config import FirebaseConfig, UploadConfig
 from plaite.data import get_recipes
 from plaite.data.query import Filter
+from plaite.data.status import get_bad_ids, mark_bad, mark_uploaded
 from plaite.firebase.client import get_uploaded_recipe_ids
 from plaite.firebase.upload import upload_batch, upload_image
-from plaite.images import ImageGenerator
+from plaite.images import ImageGenerator, add_overlay, build_food_prompt
 from plaite.models.recipe import Recipe
 from plaite.pipeline._shared import UploadResult
 
@@ -74,14 +76,77 @@ def preview_recipes(df: pl.DataFrame, console: Console, limit: int = 5):
     console.print(table)
 
 
+def _supervise_recipe(
+    recipe: dict,
+    generator: ImageGenerator,
+    temp_path: Path,
+    config: FirebaseConfig,
+    upload_config: UploadConfig,
+    console: Console,
+) -> tuple[dict, bool]:
+    """
+    Two-stage supervised review:
+      1. Show recipe details → confirm to generate image (or skip)
+      2. Open generated image → confirm to upload (or skip)
+
+    Returns (recipe_with_image, approved).
+    """
+    import subprocess
+
+    title = recipe.get("title", "Unknown")
+    console.rule(f"[bold cyan]{title}[/bold cyan]")
+
+    # Stage 1: show recipe details
+    console.print(f"  [bold]Health Grade:[/bold] {recipe.get('healthGrade', '-')}")
+    console.print(f"  [bold]Cook Time:[/bold] {recipe.get('cookTime', '-')} min")
+    console.print(f"  [bold]Rating:[/bold] {recipe.get('ratings', '-')}")
+    console.print(f"  [bold]Tags:[/bold] {', '.join(recipe.get('tags') or [])}")
+    console.print(f"  [bold]Ingredients:[/bold] {', '.join((recipe.get('ingredientStrings') or [])[:6])}")
+
+    choice = typer.prompt("\n  Generate image? [y/n/bad]", default="y").strip().lower()
+    if choice == "bad":
+        mark_bad([recipe.get("id") or recipe.get("recipe_id")])
+        console.print("  [red]Marked as bad.[/red]")
+        return recipe, False
+    if choice != "y":
+        return recipe, False
+
+    # Stage 2: generate image, open for preview, confirm upload
+    console.print("\n  [yellow]Generating image…[/yellow]")
+    try:
+        image_url = upgen_images(
+            generator=generator,
+            temp_path=temp_path,
+            recipe=recipe,
+            config=config,
+            upload_config=upload_config,
+            console=console,
+            supervise=True,
+        )
+        if image_url:
+            recipe["image"] = image_url
+            image_path = temp_path / f"{recipe['id']}.jpg"
+            if image_path.exists():
+                subprocess.run(["open", str(image_path)], check=False)
+        else:
+            console.print("  [red]Image generation failed — will upload without image.[/red]")
+    except Exception as e:
+        console.print(f"  [red]Image error: {e}[/red]")
+
+    approved = typer.confirm("\n  Upload this recipe?", default=True)
+    return recipe, approved
+
+
 def upload_from_local(
     count: int,
     filters: list[Filter] | None,
     config: FirebaseConfig,
     upload_config: UploadConfig,
     console: Console,
+    env: str = "dev",
     dry_run: bool = False,
     exclude_uploaded: bool = True,
+    supervise: bool = False,
 ) -> UploadResult:
     """
     Full pipeline: select -> check Firebase -> validate -> upload.
@@ -106,6 +171,16 @@ def upload_from_local(
     """
     console.print("\n[bold]Selecting recipes from local data...[/bold]")
     df = select_recipes(count, filters)
+
+    # Filter out recipes marked as bad in the local parquet
+    bad_ids = get_bad_ids()
+    if bad_ids:
+        before = len(df)
+        df = df.filter(~pl.col("recipe_id").is_in(bad_ids))
+        filtered = before - len(df)
+        if filtered:
+            console.print(f"  Excluded {filtered} bad recipes")
+
     console.print(f"Selected {len(df)} recipes")
 
     if len(df) == 0:
@@ -157,40 +232,60 @@ def upload_from_local(
     if dry_run:
         return result
 
-    # Generate and upload images
-    console.print("\n[bold]Generating and uploading images...[/bold]")
-
-    # Initialize generator
+    # Generate and upload images (auto or supervised)
     try:
         generator = ImageGenerator()
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
-            for recipe in valid_recipes:
-                try:
-                    title = recipe.get("title", "Unknown Recipe")
-                    image_url = upgen_images(
+            if supervise:
+                console.print("\n[bold]Supervised mode — reviewing each recipe…[/bold]")
+                approved_recipes: list[dict[str, Any]] = []
+                for recipe in valid_recipes:
+                    recipe, approved = _supervise_recipe(
+                        recipe=recipe,
                         generator=generator,
                         temp_path=temp_path,
-                        recipe=recipe,
                         config=config,
                         upload_config=upload_config,
                         console=console,
                     )
-                    if image_url:
-                        recipe["image"] = image_url
-                        console.print(f"    [green]Image linked:[/green] {image_url}")
+                    result.images_generated += 1
+                    if approved:
+                        approved_recipes.append(recipe)
                     else:
-                        console.print(f"    [red]Failed to upload image for {title}[/red]")
-
-                except Exception as e:
-                    console.print(f"    [red]Image processing failed for {title}: {e}[/red]")
-                    # We continue even if image generation fails, uploading the recipe without new image
+                        result.skipped.append({"id": recipe.get("id"), "reason": "rejected in review"})
+                valid_recipes = approved_recipes
+            else:
+                console.print("\n[bold]Generating and uploading images...[/bold]")
+                for recipe in valid_recipes:
+                    title = recipe.get("title", "Unknown Recipe")
+                    try:
+                        image_url = upgen_images(
+                            generator=generator,
+                            temp_path=temp_path,
+                            recipe=recipe,
+                            config=config,
+                            upload_config=upload_config,
+                            console=console,
+                        )
+                        result.images_generated += 1
+                        if image_url:
+                            recipe["image"] = image_url
+                            console.print(f"    [green]Image linked:[/green] {image_url}")
+                        else:
+                            console.print(f"    [red]Failed to upload image for {title}[/red]")
+                    except Exception as e:
+                        console.print(f"    [red]Image processing failed for {title}: {e}[/red]")
 
     except Exception as e:
         console.print(f"[red]Image generator initialization failed: {e}[/red]")
         console.print("[yellow]Proceeding with recipe upload without image generation...[/yellow]")
+
+    if not valid_recipes:
+        console.print("[yellow]No recipes approved for upload.[/yellow]")
+        return result
 
     console.print("\n[bold]Uploading to Firebase...[/bold]")
     upload_results = upload_batch(
@@ -202,6 +297,13 @@ def upload_from_local(
     )
     result.uploaded = upload_results.get("success", 0)
     result.failed.extend(upload_results.get("failed", []))
+
+    # Mark successfully uploaded recipes in the local parquet (prod only)
+    if env == "prod":
+        failed_ids = {f["id"] for f in upload_results.get("failed", [])}
+        uploaded_ids = [r["id"] for r in valid_recipes if r["id"] not in failed_ids]
+        mark_uploaded(uploaded_ids)
+
     return result
 
 
@@ -212,26 +314,35 @@ def upgen_images(
     config: FirebaseConfig,
     upload_config: UploadConfig,
     console: Console,
+    supervise: bool = False,
 ) -> str | None:
     title = recipe.get("title", "Unknown Recipe")
-    ingredients = recipe.get("ingredientStrings", [])  # using ingredientStrings for prompt
 
-    # Construct prompt
-    ing_text = ", ".join(ingredients[:5])
-    prompt = f"Professional food photography of {title} with {ing_text}"
+    prompt, negative_prompt = build_food_prompt(recipe)
+
+    model = "imagen-4.0-ultra-generate-001" if supervise else None
 
     console.print(f"  Generating image for: [cyan]{title}[/cyan]")
 
     # Generate
-    image = generator.generate(prompt=prompt, num_images=1, aspect_ratio="9:16", image_size="1K")
+    image = generator.generate(
+        prompt=prompt,
+        num_images=1,
+        aspect_ratio="9:16",
+        image_size="1K",
+        negative_prompt=negative_prompt,
+        model=model,
+    )
 
     if not image:
         console.print(f"    [yellow]No image generated for {title}[/yellow]")
         return None
 
-    # Save to temp
-    image_path = temp_path / f"{recipe['id']}.png"
-    image[0].save(image_path, "PNG")
+    # Apply overlay then save as JPEG
+    image_path = temp_path / f"{recipe['id']}.jpg"
+    img = image[0].convert("RGB")
+    img = add_overlay(img) or img  # fall back to original if overlay fails
+    img.save(image_path, "JPEG", quality=85, optimize=True)
     console.print("    Uploading to Storage...")
     return upload_image(
         image_path=image_path, recipe_id=recipe["id"], config=config, upload_config=upload_config

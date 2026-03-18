@@ -78,7 +78,73 @@ def _prompt_filters() -> list:
         except ValueError:
             pass
 
+    # Tag filter
+    tag = typer.prompt(
+        "Filter by tag (must contain, e.g. 'Vegan')",
+        default="",
+        show_default=False,
+    )
+    if tag.strip():
+        filters.append(Col.tags.list_any_contains(tag.strip()))
+
     return filters
+
+
+@app.command()
+def tags(
+    source: Annotated[str, typer.Option(help="Data source: local, firebase, or both")] = "both",
+    env: Annotated[Env, typer.Option(help="Environment: prod or dev")] = "dev",
+    config: Annotated[Path, typer.Option(help="Firebase config path")] = DEFAULT_FIREBASE_CONFIG,
+    output: Annotated[Path | None, typer.Option(help="Output JSON file")] = None,
+):
+    """List all unique tags and their counts from local data and/or Firebase."""
+    from collections import Counter
+
+    from rich.table import Table
+
+    combined: dict[str, dict[str, int]] = {}
+
+    if source in ("local", "both"):
+        from plaite.data import get_tags as get_local_tags
+        console.print("[bold]Local tags…[/bold]")
+        local_tags = get_local_tags()
+        combined["local"] = local_tags
+        console.print(f"  {len(local_tags)} unique tags across local recipes\n")
+
+    if source in ("firebase", "both"):
+        from plaite.firebase.stats import get_tags as get_firebase_tags
+        firebase_config = load_firebase_config(config, env)
+        console.print(f"[bold]Firebase tags ({env})…[/bold]")
+        firebase_tags = get_firebase_tags(firebase_config)
+        combined["firebase"] = firebase_tags
+        console.print(f"  {len(firebase_tags)} unique tags across Firebase recipes\n")
+
+    # Print table
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Tag")
+    if source in ("local", "both"):
+        table.add_column("Local", justify="right")
+    if source in ("firebase", "both"):
+        table.add_column("Firebase", justify="right")
+
+    all_tags = sorted(
+        set(combined.get("local", {}).keys()) | set(combined.get("firebase", {}).keys())
+    )
+    for tag in sorted(all_tags, key=lambda t: -combined.get("local", {}).get(t, 0) or -combined.get("firebase", {}).get(t, 0)):
+        row = [tag]
+        if source in ("local", "both"):
+            row.append(str(combined["local"].get(tag, 0)))
+        if source in ("firebase", "both"):
+            row.append(str(combined["firebase"].get(tag, 0)))
+        table.add_row(*row)
+
+    console.print(table)
+
+    if output:
+        import json
+        with open(output, "w", encoding="utf-8") as f:
+            json.dump(combined, f, indent=2)
+        console.print(f"\n[green]Saved to {output}[/green]")
 
 
 @app.command()
@@ -222,6 +288,9 @@ def sync(
     include_uploaded: Annotated[
         bool, typer.Option("--include-uploaded", help="Include recipes already in Firebase")
     ] = False,
+    supervise: Annotated[
+        bool, typer.Option("--supervise", help="Review each recipe and generated image before uploading")
+    ] = False,
 ):
     """Upload recipes from local data to Firebase (interactive)."""
     from plaite.data import get_recipes
@@ -267,8 +336,10 @@ def sync(
         config=firebase_config,
         upload_config=upload_cfg,
         console=console,
+        env=env,
         dry_run=dry_run,
         exclude_uploaded=not include_uploaded,
+        supervise=supervise,
     )
 
     # Summary
@@ -276,6 +347,13 @@ def sync(
     console.print(f"  Selected: {result.total_selected}")
     console.print(f"  Valid: {result.total_valid}")
     console.print(f"  Uploaded: {result.uploaded}")
+
+    if result.images_generated:
+        cost = result.estimated_cost()
+        console.print(f"  Images generated: {result.images_generated} (~[yellow]${cost:.2f}[/yellow] @ $0.04/image)")
+
+    if result.skipped:
+        console.print(f"  Skipped: {len(result.skipped)}")
 
     if result.failed:
         console.print(f"  [red]Failed: {len(result.failed)}[/red]")

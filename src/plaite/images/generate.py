@@ -49,6 +49,7 @@ class ImageGenerator:
         aspect_ratio: Literal["1:1", "3:4", "4:3", "9:16", "16:9"] = "1:1",
         image_size: Literal["1K", "2K"] = "1K",
         person_generation: Literal["dont_allow", "allow_adult", "allow_all"] = "dont_allow",
+        negative_prompt: str | None = None,
     ) -> list[Image.Image]:
         """
         Generate images from a text prompt.
@@ -83,9 +84,12 @@ class ImageGenerator:
 
         # Generate images
         try:
+            # Gemini API does not support negative_prompt natively — fold it into the prompt
+            full_prompt = f"{prompt} Avoid: {negative_prompt}." if negative_prompt else prompt
+
             response = self.client.models.generate_images(
                 model=model,
-                prompt=prompt,
+                prompt=full_prompt,
                 config=types.GenerateImagesConfig(
                     number_of_images=num_images,
                     aspect_ratio=aspect_ratio,

@@ -64,6 +64,7 @@ from .loader import (
     get_recipes,
     get_recipes_columns,
     get_stats_of_all_recipes,
+    get_tags,
     load_recipes,
 )
 from .query import Col
@@ -79,6 +80,7 @@ __all__ = [
     "get_recipes_columns",
     "get_batch_of_recipes",
     "get_stats_of_all_recipes",
+    "get_tags",
     "recipes_table",
     "RecipeColumn",
 ]

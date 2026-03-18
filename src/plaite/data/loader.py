@@ -393,3 +393,20 @@ def get_filtered_recipes(*filters: Filter, query: dict[str, Any] | None = None) 
 
 # Convenience alias for cleaner API
 get_recipes = get_filtered_recipes
+
+
+def get_tags() -> dict[str, int]:
+    """
+    Get all unique tags and their counts from the local parquet dataset.
+
+    Returns
+    -------
+    dict[str, int]
+        Tag strings mapped to the number of recipes they appear on,
+        sorted descending by count.
+    """
+    from collections import Counter
+
+    tags_series = recipes_table.scan().select(pl.col("tags").explode()).collect()["tags"]
+    counts: Counter[str] = Counter(tag for tag in tags_series.to_list() if tag is not None)
+    return dict(counts.most_common())
